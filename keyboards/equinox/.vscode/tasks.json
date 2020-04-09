@@ -1,0 +1,51 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build",
+            "type": "shell",
+            "command": "make equinox/${input:role}:${input:keymap}:uf2",
+            "options": {
+                "cwd": "${env:QMK_ROOT}"
+            },
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+      
+        {
+            "label": "clean",
+            "type": "shell",
+            "command": "make clean",
+            "options": {
+                "cwd": "${env:QMK_ROOT}"
+            },
+            "problemMatcher": []
+        }
+    ],
+    "inputs": [
+        {
+            "id": "keymap",
+            "description": "Select keymap",
+            "options": [
+                "default"
+              ],
+            "default": "default",
+            "type": "pickString"
+        },
+        {
+            "id": "role",
+            "description": "Select keyboard role",
+            "options": [
+                "master",
+                "slave",
+              ],
+            "default": "master",
+            "type": "pickString"
+        },        
+    ]    
+}

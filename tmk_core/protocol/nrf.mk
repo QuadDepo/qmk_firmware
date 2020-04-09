@@ -1,24 +1,26 @@
 PROTOCOL_DIR = protocol
 NRF_DIR = $(PROTOCOL_DIR)/nrf
 
-  SRC += $(NRF_DIR)/matrix.c \
-  				$(NRF_DIR)/io_expander.c \
+SRC += $(NRF_DIR)/matrix.c \
+#  				$(NRF_DIR)/io_expander.c \
 
-  SRC += $(NRF_DIR)/$(NRF_VER_DIR)/ble_common.c \
-       $(NRF_DIR)/$(NRF_VER_DIR)/i2c_master.c \
-       $(NRF_DIR)/$(NRF_VER_DIR)/i2c_slave.c \
-       $(NRF_DIR)/$(NRF_VER_DIR)/spi_master.c \
 
-ifeq ($(MCU_FAMILY),NRF51)
-  SRC += $(NRF_DIR)/$(NRF_VER_DIR)/system_nrf51.c
-  SRC += $(NRF_DIR)/nrf51/adc.c
-endif
+SRC += $(NRF_DIR)/$(NRF_VER_DIR)/ble_common.c \
+#       $(NRF_DIR)/$(NRF_VER_DIR)/i2c_master.c \
+#       $(NRF_DIR)/$(NRF_VER_DIR)/i2c_slave.c \
+#       $(NRF_DIR)/$(NRF_VER_DIR)/spi_master.c \
 
-ifeq ($(MCU_FAMILY),NRF52)
-  SRC += $(NRF_DIR)/nrf52/adc.c
-endif
 
-  
+#ifeq ($(MCU_FAMILY),NRF51)
+#  SRC += $(NRF_DIR)/$(NRF_VER_DIR)/system_nrf51.c
+#  SRC += $(NRF_DIR)/nrf51/adc.c
+#endif
+
+#ifeq ($(MCU_FAMILY),NRF52)
+#  SRC += $(NRF_DIR)/nrf52/adc.c
+#endif
+
+
 ifeq ($(MCU_SERIES), NRF52840)
  SRC += $(NRF_DIR)/$(NRF_VER_DIR)/usbd.c \
        $(NRF_DIR)/$(NRF_VER_DIR)/app_usbd_hid_kbd.c \
@@ -38,7 +40,7 @@ ifeq ($(strip $(NRF_SEPARATE)), slave)
   CFLAGS += -DNRF_SEPARATE_KEYBOARD_SLAVE
   SRC += $(NRF_DIR)/$(NRF_VER_DIR)/ble_slave.c
   SRC += $(NRF_DIR)/main_slave.c
-else 
+else
   SRC += $(NRF_DIR)/$(NRF_VER_DIR)/ble_master.c
   SRC += $(NRF_DIR)/main_master.c
   ifeq ($(strip $(NRF_SEPARATE)), master)

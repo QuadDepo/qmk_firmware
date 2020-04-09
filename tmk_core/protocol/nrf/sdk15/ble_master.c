@@ -77,8 +77,9 @@
 #include "nrf_log_default_backends.h"
 
 #include "ble_central.h"
-#include "adc.h"
 #include "ble_common.h"
+
+#include "board.h"
 
 #define SHIFT_BUTTON_ID                     1                                          /**< Button used as 'SHIFT' Key. */
 
@@ -88,7 +89,7 @@
 #define APP_BLE_OBSERVER_PRIO               3                                          /**< Application's BLE observer priority. You shouldn't need to modify this value. */
 #define APP_BLE_CONN_CFG_TAG                1                                          /**< A tag identifying the SoftDevice BLE configuration. */
 
-#define BATTERY_LEVEL_MEAS_INTERVAL         APP_TIMER_TICKS(2000)                      /**< Battery level measurement interval (ticks). */
+#define BATTERY_LEVEL_MEAS_INTERVAL         APP_TIMER_TICKS(10000)                     /**< Battery level measurement interval (ticks). */
 #define MIN_BATTERY_LEVEL                   81                                         /**< Minimum simulated battery level. */
 #define MAX_BATTERY_LEVEL                   100                                        /**< Maximum simulated battery level. */
 #define BATTERY_LEVEL_INCREMENT             1                                          /**< Increment between each simulated battery level measurement. */
@@ -175,7 +176,6 @@ BLE_ADVERTISING_DEF( m_advertising); /**< Advertising module instance. */
 
 static bool m_in_boot_mode = false; /**< Current protocol mode. */
 static uint16_t m_conn_handle = BLE_CONN_HANDLE_INVALID; /**< Handle of the current connection. */
-static bool m_caps_on = false; /**< Variable to indicate if Caps Lock is turned on. */
 static pm_peer_id_t m_peer_id; /**< Device reference handle to the current bonded central. */
 static uint32_t m_whitelist_peer_cnt; /**< Number of peers currently in the whitelist. */
 static pm_peer_id_t m_whitelist_peers[BLE_GAP_WHITELIST_ADDR_MAX_COUNT]; /**< List of peers currently in the whitelist. */
@@ -184,9 +184,10 @@ static ble_uuid_t m_adv_uuids[] = { { BLE_UUID_HUMAN_INTERFACE_DEVICE_SERVICE,
     BLE_UUID_TYPE_BLE } };
 
 static void on_hids_evt(ble_hids_t * p_hids, ble_hids_evt_t * p_evt);
+void restart_advertising_wo_whitelist(void);
+void restart_advertising_id(uint8_t id);
 
 /**@brief Callback function for asserts in the SoftDevice.
- *
  * @details This function will be called in case of an assert in the SoftDevice.
  *
  * @warning This handler is an example only and does not fit a final product. You need to analyze
@@ -299,7 +300,8 @@ static void pm_evt_handler(pm_evt_t const * p_evt) {
     break;
 
   case PM_EVT_PEERS_DELETE_SUCCEEDED: {
-    advertising_start();
+    //advertising_start();
+    restart_advertising_wo_whitelist();
   }
     break;
 
@@ -392,8 +394,9 @@ static void battery_level_update(void) {
   ret_code_t err_code;
   uint8_t battery_level;
 
-  adc_start();
-  battery_level = get_vcc() / 30;
+  //adc_start();
+  //battery_level = get_vcc() / 30;
+  battery_level = board_battery_level();
 
   err_code = ble_bas_battery_level_update(&m_bas, battery_level,
       BLE_CONN_HANDLE_ALL);
@@ -472,7 +475,8 @@ void gap_params_init(void) {
       (const uint8_t*) STR(PRODUCT), strlen(STR(PRODUCT)));
   APP_ERROR_CHECK(err_code);
 
-  err_code = sd_ble_gap_appearance_set(BLE_APPEARANCE_GENERIC_HID);
+//  err_code = sd_ble_gap_appearance_set(BLE_APPEARANCE_GENERIC_HID);
+  err_code = sd_ble_gap_appearance_set(BLE_APPEARANCE_HID_KEYBOARD);
   APP_ERROR_CHECK(err_code);
 
   memset(&gap_conn_params, 0, sizeof(gap_conn_params));
@@ -561,6 +565,129 @@ static void bas_init(void) {
   err_code = ble_bas_init(&m_bas, &bas_init_obj);
   APP_ERROR_CHECK(err_code);
 }
+
+static void hids_init(void)
+{
+    ret_code_t                 err_code;
+    ble_hids_init_t            hids_init_obj;
+    ble_hids_inp_rep_init_t  * p_input_report;
+    ble_hids_outp_rep_init_t * p_output_report;
+    uint8_t                    hid_info_flags;
+
+    static ble_hids_inp_rep_init_t  input_report_array[1];
+    static ble_hids_outp_rep_init_t output_report_array[1];
+    static uint8_t                  report_map_data[] =
+    {
+        0x05, 0x01,       // Usage Page (Generic Desktop)
+        0x09, 0x06,       // Usage (Keyboard)
+        0xA1, 0x01,       // Collection (Application)
+        0x05, 0x07,       // Usage Page (Key Codes)
+        0x19, 0xe0,       // Usage Minimum (224)
+        0x29, 0xe7,       // Usage Maximum (231)
+        0x15, 0x00,       // Logical Minimum (0)
+        0x25, 0x01,       // Logical Maximum (1)
+        0x75, 0x01,       // Report Size (1)
+        0x95, 0x08,       // Report Count (8)
+        0x81, 0x02,       // Input (Data, Variable, Absolute)
+
+        0x95, 0x01,       // Report Count (1)
+        0x75, 0x08,       // Report Size (8)
+        0x81, 0x01,       // Input (Constant) reserved byte(1)
+
+        0x95, 0x05,       // Report Count (5)
+        0x75, 0x01,       // Report Size (1)
+        0x05, 0x08,       // Usage Page (Page# for LEDs)
+        0x19, 0x01,       // Usage Minimum (1)
+        0x29, 0x05,       // Usage Maximum (5)
+        0x91, 0x02,       // Output (Data, Variable, Absolute), Led report
+        0x95, 0x01,       // Report Count (1)
+        0x75, 0x03,       // Report Size (3)
+        0x91, 0x01,       // Output (Data, Variable, Absolute), Led report padding
+
+        0x95, 0x06,       // Report Count (6)
+        0x75, 0x08,       // Report Size (8)
+        0x15, 0x00,       // Logical Minimum (0)
+        0x25, 0x65,       // Logical Maximum (101)
+        0x05, 0x07,       // Usage Page (Key codes)
+        0x19, 0x00,       // Usage Minimum (0)
+        0x29, 0x65,       // Usage Maximum (101)
+        0x81, 0x00,       // Input (Data, Array) Key array(6 bytes)
+
+        0x09, 0x05,       // Usage (Vendor Defined)
+        0x15, 0x00,       // Logical Minimum (0)
+        0x26, 0xFF, 0x00, // Logical Maximum (255)
+        0x75, 0x08,       // Report Count (2)
+        0x95, 0x02,       // Report Size (8 bit)
+        0xB1, 0x02,       // Feature (Data, Variable, Absolute)
+
+        0xC0              // End Collection (Application)
+    };
+
+    memset((void *)input_report_array, 0, sizeof(ble_hids_inp_rep_init_t));
+    memset((void *)output_report_array, 0, sizeof(ble_hids_outp_rep_init_t));
+
+    // Initialize HID Service
+    p_input_report                      = &input_report_array[INPUT_REPORT_KEYS_INDEX];
+    p_input_report->max_len             = INPUT_REPORT_KEYS_MAX_LEN;
+    p_input_report->rep_ref.report_id   = INPUT_REP_REF_ID;
+    p_input_report->rep_ref.report_type = BLE_HIDS_REP_TYPE_INPUT;
+
+    BLE_GAP_CONN_SEC_MODE_SET_ENC_NO_MITM(&p_input_report->security_mode.cccd_write_perm);
+    BLE_GAP_CONN_SEC_MODE_SET_ENC_NO_MITM(&p_input_report->security_mode.read_perm);
+    BLE_GAP_CONN_SEC_MODE_SET_ENC_NO_MITM(&p_input_report->security_mode.write_perm);
+
+    p_output_report                      = &output_report_array[OUTPUT_REPORT_INDEX];
+    p_output_report->max_len             = OUTPUT_REPORT_MAX_LEN;
+    p_output_report->rep_ref.report_id   = OUTPUT_REP_REF_ID;
+    p_output_report->rep_ref.report_type = BLE_HIDS_REP_TYPE_OUTPUT;
+
+    BLE_GAP_CONN_SEC_MODE_SET_ENC_NO_MITM(&p_output_report->security_mode.read_perm);
+    BLE_GAP_CONN_SEC_MODE_SET_ENC_NO_MITM(&p_output_report->security_mode.write_perm);
+
+    hid_info_flags = HID_INFO_FLAG_REMOTE_WAKE_MSK | HID_INFO_FLAG_NORMALLY_CONNECTABLE_MSK;
+
+    memset(&hids_init_obj, 0, sizeof(hids_init_obj));
+
+    hids_init_obj.evt_handler                    = on_hids_evt;
+    hids_init_obj.error_handler                  = service_error_handler;
+    hids_init_obj.is_kb                          = true;
+    hids_init_obj.is_mouse                       = false;
+    hids_init_obj.inp_rep_count                  = 1;
+    hids_init_obj.p_inp_rep_array                = input_report_array;
+    hids_init_obj.outp_rep_count                 = 1;
+    hids_init_obj.p_outp_rep_array               = output_report_array;
+    hids_init_obj.feature_rep_count              = 0;
+    hids_init_obj.p_feature_rep_array            = NULL;
+    hids_init_obj.rep_map.data_len               = sizeof(report_map_data);
+    hids_init_obj.rep_map.p_data                 = report_map_data;
+    hids_init_obj.hid_information.bcd_hid        = BASE_USB_HID_SPEC_VERSION;
+    hids_init_obj.hid_information.b_country_code = 0;
+    hids_init_obj.hid_information.flags          = hid_info_flags;
+    hids_init_obj.included_services_count        = 0;
+    hids_init_obj.p_included_services_array      = NULL;
+
+    BLE_GAP_CONN_SEC_MODE_SET_ENC_NO_MITM(&hids_init_obj.rep_map.security_mode.read_perm);
+    BLE_GAP_CONN_SEC_MODE_SET_NO_ACCESS(&hids_init_obj.rep_map.security_mode.write_perm);
+    BLE_GAP_CONN_SEC_MODE_SET_ENC_NO_MITM(&hids_init_obj.hid_information.security_mode.read_perm);
+    BLE_GAP_CONN_SEC_MODE_SET_NO_ACCESS(&hids_init_obj.hid_information.security_mode.write_perm);
+
+    BLE_GAP_CONN_SEC_MODE_SET_ENC_NO_MITM(
+        &hids_init_obj.security_mode_boot_kb_inp_rep.cccd_write_perm);
+    BLE_GAP_CONN_SEC_MODE_SET_ENC_NO_MITM(&hids_init_obj.security_mode_boot_kb_inp_rep.read_perm);
+    BLE_GAP_CONN_SEC_MODE_SET_NO_ACCESS(&hids_init_obj.security_mode_boot_kb_inp_rep.write_perm);
+    BLE_GAP_CONN_SEC_MODE_SET_ENC_NO_MITM(&hids_init_obj.security_mode_boot_kb_outp_rep.read_perm);
+    BLE_GAP_CONN_SEC_MODE_SET_ENC_NO_MITM(&hids_init_obj.security_mode_boot_kb_outp_rep.write_perm);
+
+    BLE_GAP_CONN_SEC_MODE_SET_ENC_NO_MITM(&hids_init_obj.security_mode_protocol.read_perm);
+    BLE_GAP_CONN_SEC_MODE_SET_ENC_NO_MITM(&hids_init_obj.security_mode_protocol.write_perm);
+    BLE_GAP_CONN_SEC_MODE_SET_NO_ACCESS(&hids_init_obj.security_mode_ctrl_point.read_perm);
+    BLE_GAP_CONN_SEC_MODE_SET_ENC_NO_MITM(&hids_init_obj.security_mode_ctrl_point.write_perm);
+
+    err_code = ble_hids_init(&m_hids_composite, &hids_init_obj);
+    APP_ERROR_CHECK(err_code);
+}
+
+
 
 void composite_service_init(void) {
   uint32_t err_code;
@@ -719,8 +846,8 @@ void services_init(void) {
   qwr_init();
   dis_init();
   bas_init();
-//  hids_init();
-  composite_service_init();
+  hids_init();
+//  composite_service_init();
 }
 
 /**@brief Function for handling a Connection Parameters error.
@@ -762,6 +889,33 @@ void timers_start(void) {
   APP_ERROR_CHECK(err_code);
 }
 
+static void on_hid_rep_char_write(ble_hids_evt_t * p_evt)
+{
+    NRF_LOG_INFO("BLE Output report type: %d", p_evt->params.char_write.char_id.rep_type);
+    if (p_evt->params.char_write.char_id.rep_type == BLE_HIDS_REP_TYPE_OUTPUT)
+    {
+        ret_code_t err_code;
+        uint8_t  report_val;
+        uint8_t  report_index = p_evt->params.char_write.char_id.rep_index;
+
+        if (report_index == OUTPUT_REPORT_INDEX)
+        {
+            err_code = ble_hids_outp_rep_get(&m_hids_composite,
+                                             report_index,
+                                             OUTPUT_REPORT_MAX_LEN,
+                                             0,
+                                             m_conn_handle,
+                                             &report_val);
+            APP_ERROR_CHECK(err_code);
+            if (report_val & (1 <<1))
+              NRF_LOG_INFO("Caps lock received.");
+
+            board_on_hid_leds(report_val);
+        }
+    }
+}
+
+
 /**@brief Function for handling HID events.
  *
  * @details This function will be called for all HID events which are passed to the application.
@@ -769,7 +923,10 @@ void timers_start(void) {
  * @param[in]   p_hids  HID service structure.
  * @param[in]   p_evt   Event received from the HID service.
  */
-static void on_hids_evt(ble_hids_t * p_hids, ble_hids_evt_t * p_evt) {
+static void on_hids_evt(ble_hids_t * p_hids, ble_hids_evt_t * p_evt)
+{
+  NRF_LOG_INFO("BLE HID Event %d, ",p_evt->evt_type);
+
   switch (p_evt->evt_type) {
   case BLE_HIDS_EVT_BOOT_MODE_ENTERED:
     m_in_boot_mode = true;
@@ -780,6 +937,7 @@ static void on_hids_evt(ble_hids_t * p_hids, ble_hids_evt_t * p_evt) {
     break;
 
   case BLE_HIDS_EVT_REP_CHAR_WRITE:
+    on_hid_rep_char_write(p_evt);
     break;
 
   case BLE_HIDS_EVT_NOTIF_ENABLED:
@@ -802,26 +960,32 @@ static void on_adv_evt(ble_adv_evt_t ble_adv_evt) {
 
   switch (ble_adv_evt) {
   case BLE_ADV_EVT_DIRECTED_HIGH_DUTY:
+    board_on_ble_event(BOARD_BLE_HOST_ADVERTISING);
     NRF_LOG_INFO("High Duty Directed advertising.");
     break;
 
   case BLE_ADV_EVT_DIRECTED:
+    board_on_ble_event(BOARD_BLE_HOST_ADVERTISING);
     NRF_LOG_INFO("Directed advertising.");
     break;
 
   case BLE_ADV_EVT_FAST:
+    board_on_ble_event(BOARD_BLE_HOST_ADVERTISING);
     NRF_LOG_INFO("Fast advertising.");
     break;
 
   case BLE_ADV_EVT_SLOW:
     NRF_LOG_INFO("Slow advertising.");
+    board_on_ble_event(BOARD_BLE_HOST_ADVERTISING);
     break;
 
   case BLE_ADV_EVT_FAST_WHITELIST:
+    board_on_ble_event(BOARD_BLE_HOST_ADVERTISING);
     NRF_LOG_INFO("Fast advertising with whitelist.");
     break;
 
   case BLE_ADV_EVT_SLOW_WHITELIST:
+    board_on_ble_event(BOARD_BLE_HOST_ADVERTISING);
     NRF_LOG_INFO("Slow advertising with whitelist.");
     break;
 
@@ -891,7 +1055,8 @@ static void on_ble_peripheral_evt(ble_evt_t const * p_ble_evt) {
     ble_adv_modes_config_t options;
     memset(&options, 0, sizeof(options));
     options.ble_adv_whitelist_enabled = true;
-    options.ble_adv_directed_high_duty_enabled = true;
+    options.ble_adv_directed_high_duty_enabled = false;
+    options.ble_adv_on_disconnect_disabled = true;
     options.ble_adv_directed_enabled = false;
     options.ble_adv_directed_interval = 0;
     options.ble_adv_directed_timeout = 0;
@@ -902,18 +1067,21 @@ static void on_ble_peripheral_evt(ble_evt_t const * p_ble_evt) {
     options.ble_adv_slow_interval = APP_ADV_SLOW_INTERVAL;
     options.ble_adv_slow_timeout = APP_ADV_SLOW_DURATION;
     ble_advertising_modes_config_set(&m_advertising, &options);
+
+    board_on_ble_event(BOARD_BLE_HOST_CONNECTED);
     break;
 
   case BLE_GAP_EVT_DISCONNECTED:
-    NRF_LOG_INFO("Disconnected");
+    NRF_LOG_INFO("Disconnected reason: 0x%X",
+        p_ble_evt->evt.gap_evt.params.disconnected.reason);
+
     // Dequeue all keys without transmission.
 
     m_conn_handle = BLE_CONN_HANDLE_INVALID;
 
-    // Reset m_caps_on variable. Upon reconnect, the HID host will re-send the Output
-    // report containing the Caps lock state.
-    m_caps_on = false;
-    // disabling alert 3. signal - used for capslock ON
+    board_on_ble_event(BOARD_BLE_HOST_DISCONNECTED);
+
+    restart_advertising_wo_whitelist();
 
     break; // BLE_GAP_EVT_DISCONNECTED
 
@@ -1049,6 +1217,7 @@ void advertising_init(void) {
 
   init.config.ble_adv_whitelist_enabled = true;
   init.config.ble_adv_directed_high_duty_enabled = true;
+  init.config.ble_adv_on_disconnect_disabled = true;
   init.config.ble_adv_directed_enabled = false;
   init.config.ble_adv_directed_interval = 0;
   init.config.ble_adv_directed_timeout = 0;
@@ -1235,7 +1404,7 @@ void main_task_start(uint8_t interval_ms) {
   APP_ERROR_CHECK(err_code);
 }
 
-void restart_advertising_wo_whitelist() {
+void restart_advertising_wo_whitelist(void) {
   uint32_t err_code;
 
   sd_ble_gap_adv_stop(m_advertising.adv_handle);
@@ -1248,6 +1417,7 @@ void restart_advertising_wo_whitelist() {
   memset(&options, 0, sizeof(options));
   options.ble_adv_whitelist_enabled = false;
   options.ble_adv_directed_high_duty_enabled = false;
+  options.ble_adv_on_disconnect_disabled = true;
   options.ble_adv_directed_enabled = false;
   options.ble_adv_fast_enabled = true;
   options.ble_adv_fast_interval = APP_ADV_FAST_INTERVAL;
@@ -1280,6 +1450,7 @@ void restart_advertising_id(uint8_t id) {
     memset(&options, 0, sizeof(options));
     options.ble_adv_whitelist_enabled = true;
     options.ble_adv_directed_high_duty_enabled = false;
+    options.ble_adv_on_disconnect_disabled = true;
     options.ble_adv_directed_enabled = false;
     options.ble_adv_fast_enabled = true;
     options.ble_adv_fast_interval = APP_ADV_FAST_INTERVAL;
@@ -1305,13 +1476,10 @@ void restart_advertising_id(uint8_t id) {
   m_whitelist_peer_cnt = (sizeof(m_whitelist_peers) / sizeof(pm_peer_id_t));
 
   peer_list_get(m_whitelist_peers, &m_whitelist_peer_cnt);
-  if (id >= m_whitelist_peer_cnt) {
+  if (id > m_whitelist_peer_cnt) {
     return;
   }
 #ifdef NRF_SEPARATE_KEYBOARD_MASTER
-  if (id == 0) {
-    return;
-  }
   m_whitelist_peer_cnt = 2;
   m_whitelist_peers[1] = m_whitelist_peers[id];
 #else
@@ -1323,7 +1491,7 @@ void restart_advertising_id(uint8_t id) {
   APP_ERROR_CHECK(ret);
 
   ret = pm_device_identities_list_set(m_whitelist_peers, m_whitelist_peer_cnt);
-  if (ret != NRF_ERROR_NOT_SUPPORTED) {
+  if (ret != NRF_ERROR_NOT_SUPPORTED && ret != BLE_ERROR_GAP_DEVICE_IDENTITIES_DUPLICATE) {
     APP_ERROR_CHECK(ret);
   }
 

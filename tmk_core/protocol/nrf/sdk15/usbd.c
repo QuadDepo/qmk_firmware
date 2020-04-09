@@ -47,6 +47,8 @@
 #include "usb_descriptor.h"
 #include "cli.h"
 
+#include "board.h"
+
 #ifdef RGBLIGHT_ENABLE
 #include "rgblight.h"
 #endif
@@ -162,11 +164,14 @@ const uint8_t MouseReport[] = {
 #include "app_usbd_hid_kbd.h"
 #include "app_usbd_hid_generic.h"
 #include "app_usbd_cdc_acm.h"
-//#include "boards.h"
 
 //#define NRF_LOG_MODULE_NAME "APP"
 #include "nrf_log.h"
 #include "nrf_log_ctrl.h"
+
+#include "board.h"
+const void * app_usbd_hid_kbd_out_report_get(app_usbd_hid_kbd_t const * p_kbd,
+                                             size_t * p_size);
 
 #undef APP_USBD_HID_KBD_REPORT_DSC
 #define APP_USBD_HID_KBD_REPORT_DSC() {                                                    \
@@ -567,13 +572,14 @@ char cdc_acm_getc() {
 //static void kbd_action(uint32_t button_state) {
 //}
 //
-static void kbd_status(void) {
-//    bool v;
-//    v = app_usbd_hid_kbd_led_state_get(&m_app_hid_kbd, APP_USBD_HID_KBD_LED_NUM_LOCK);
-//    v ? bsp_board_led_on(LED_HID_REP_IN) : bsp_board_led_off(LED_HID_REP_IN);
-//
-//    v = app_usbd_hid_kbd_led_state_get(&m_app_hid_kbd, APP_USBD_HID_KBD_LED_CAPS_LOCK);
-//    v ? bsp_board_led_on(LED_HID_REP_OUT) : bsp_board_led_off(LED_HID_REP_OUT);
+static void kbd_status(void)
+{
+
+    size_t size;
+    uint8_t *report = (uint8_t *) app_usbd_hid_kbd_out_report_get(&m_app_hid_kbd, &size);
+
+    if (size >= 2)
+        board_on_hid_leds(report[1]);
 }
 
 
@@ -639,12 +645,16 @@ static void usbd_user_ev_handler(app_usbd_event_type_t event)
         case APP_USBD_EVT_DRV_SOF:
             break;
         case APP_USBD_EVT_DRV_SUSPEND:
+            board_on_usb_state_change(BOARD_USB_SUSPEND);
             app_usbd_suspend_req(); // Allow the library to put the peripheral into sleep mode
             break;
         case APP_USBD_EVT_DRV_RESUME:
+            board_on_usb_state_change(BOARD_USB_RESUME);
             kbd_status(); /* Restore LED state - during SUSPEND all LEDS are turned off */
             break;
         case APP_USBD_EVT_STARTED:
+            board_on_usb_state_change(BOARD_USB_STARTED);
+            NRF_LOG_DEBUG("USB started");
             break;
         case APP_USBD_EVT_STOPPED:
             app_usbd_disable();

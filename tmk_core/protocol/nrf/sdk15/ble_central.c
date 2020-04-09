@@ -54,6 +54,8 @@
 #include "nrf_log.h"
 #include "nrf_log_ctrl.h"
 
+#include "board.h"
+
 #if (NRF_SD_BLE_API_VERSION == 3)
 #define NRF_BLE_MAX_MTU_SIZE        GATT_MTU_SIZE_DEFAULT                         /**< MTU size used in the softdevice enabling and to reply to a BLE_GATTS_EVT_EXCHANGE_MTU_REQUEST event. */
 #endif
@@ -95,6 +97,7 @@ bool m_whitelist_disabled;
  *  if these are set to empty strings, the UUIDs defined below will be used
  */
 static const char m_target_periph_name[] = "Nordic_UART";
+
 
 /**
  * @brief Parameters used when scanning.
@@ -226,6 +229,7 @@ void scan_start(void) {
 //    whitelist_load();
 
     // Get the whitelist previously set using pm_whitelist_set().
+/*
     err_code = pm_whitelist_get(whitelist_addrs, &addr_cnt, whitelist_irks,
         &irk_cnt);
 
@@ -238,6 +242,9 @@ void scan_start(void) {
     } else {
       m_whitelist_disabled = false;
     }
+*/
+
+      m_whitelist_disabled = true;
 
     if (((addr_cnt == 0) && (irk_cnt == 0)) || (m_whitelist_disabled)) {
       // Don't use whitelist.
@@ -258,6 +265,7 @@ void scan_start(void) {
 //      APP_ERROR_CHECK(err_code);
     } else {
       NRF_LOG_INFO("Scanning slave keyboard...");
+      board_on_ble_event(BOARD_BLE_SLAVE_SCANNING);
     }
   } else {
     NRF_LOG_INFO("Fstorage is busy");
@@ -292,15 +300,21 @@ static void ble_nus_c_evt_handler(ble_nus_c_t * p_ble_nus_c,
     APP_ERROR_CHECK(err_code);
 
     // Initiate bonding.
+/*
     err_code = pm_conn_secure(p_ble_nus_evt->conn_handle, false);
     if (err_code != NRF_ERROR_INVALID_STATE)
     {
         APP_ERROR_CHECK(err_code);
     }
+*/
+
 
     err_code = ble_nus_c_tx_notif_enable(p_ble_nus_c);
     APP_ERROR_CHECK(err_code);
     NRF_LOG_DEBUG("The device has the Nordic UART Service\r\n");
+
+    board_on_ble_event(BOARD_BLE_SLAVE_CONNECTED);
+
     break;
 
   case BLE_NUS_C_EVT_NUS_TX_EVT:
@@ -329,7 +343,7 @@ static void ble_nus_c_evt_handler(ble_nus_c_t * p_ble_nus_c,
 static void on_adv_report(ble_gap_evt_adv_report_t const * p_adv_report) {
   ret_code_t err_code;
 
-//  if (ble_advdata_uuid_find(p_adv_report->data.p_data, p_adv_report->data.len,
+    //  if (ble_advdata_uuid_find(p_adv_report->data.p_data, p_adv_report->data.len,
 //      &m_nus_uuid)) {
   if (ble_advdata_name_find(p_adv_report->data.p_data, p_adv_report->data.len,
       m_target_periph_name)) {
@@ -340,7 +354,7 @@ static void on_adv_report(ble_gap_evt_adv_report_t const * p_adv_report) {
       // scan is automatically stopped by the connect
 //      err_code = bsp_indication_set(BSP_INDICATE_IDLE);
 //      APP_ERROR_CHECK(err_code);
-      NRF_LOG_DEBUG("Connecting to target %02x%02x%02x%02x%02x%02x",
+      NRF_LOG_DEBUG("Connecting to peer %02x%02x%02x%02x%02x%02x",
           p_adv_report->peer_addr.addr[0], p_adv_report->peer_addr.addr[1],
           p_adv_report->peer_addr.addr[2], p_adv_report->peer_addr.addr[3],
           p_adv_report->peer_addr.addr[4], p_adv_report->peer_addr.addr[5]);
@@ -372,6 +386,7 @@ static void on_ble_central_conn_evt(const ble_evt_t * const p_ble_evt) {
         p_ble_evt->evt.gap_evt.conn_handle, NULL);
     APP_ERROR_CHECK(err_code);
 
+
 //    err_code = bsp_indication_set(BSP_INDICATE_CONNECTED);
 //    APP_ERROR_CHECK(err_code);
 
@@ -388,6 +403,11 @@ static void on_ble_central_conn_evt(const ble_evt_t * const p_ble_evt) {
     } else if (p_gap_evt->params.timeout.src == BLE_GAP_TIMEOUT_SRC_CONN) {
       NRF_LOG_INFO("Connection Request timed out.");
     }
+    else
+    {
+       NRF_LOG_INFO("Gap timeout: src: %x", p_gap_evt->params.timeout.src);
+    }
+
     break;
 
 //  case BLE_GAP_EVT_SEC_PARAMS_REQUEST:

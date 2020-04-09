@@ -15,6 +15,8 @@
 #endif
 
 
+#include "board.h"
+
 
 /**@brief Function for placing the application in low power state while waiting for events.
  */
@@ -123,6 +125,8 @@ void sleep_mode_enter(void) {
   for (i=0; i<THIS_DEVICE_COLS; i++) {
     nrf_gpio_cfg_sense_input(col_pins[i], NRF_GPIO_PIN_PULLUP, NRF_GPIO_PIN_SENSE_LOW);
   }
+
+  board_sleep();
 
   sd_power_system_off();
 }

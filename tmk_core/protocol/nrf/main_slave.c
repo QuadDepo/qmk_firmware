@@ -28,6 +28,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "rgblight.h"
 #endif
 
+#include "board.h"
+
 const uint8_t MAINTASK_INTERVAL=17;
 
 void sendchar_pf(void *p, char c){
@@ -41,6 +43,8 @@ static void slave_main_tasks(void* context) {
 #if defined(RGBLIGHT_ENABLE) && defined(RGBLIGHT_ANIMATIONS)
   rgblight_task();
 #endif
+
+  board_task();
 }
 
 /**@brief Application main function.
@@ -54,17 +58,26 @@ int main(void) {
 
   ble_stack_init();
   sd_power_dcdc_mode_set(NRF_POWER_DCDC_ENABLE);
+
+  board_init();
+
   services_init();
   scheduler_init();
-  peer_manager_init();
+  //peer_manager_init();
 
   gap_params_init();
   advertising_init();
   conn_params_init();
+  board_on_ble_event(BOARD_BLE_HOST_DISCONNECTED);
+
+
 
 //  matrix_init();
   init_printf(NULL, sendchar_pf);
   keyboard_init();
+
+  board_start();
+
   advertising_start();
   main_task_start(MAINTASK_INTERVAL);
   usbd_enable();
@@ -97,10 +110,10 @@ __WEAK void app_error_fault_handler(uint32_t id, uint32_t pc, uint32_t info)
     NRF_LOG_ERROR("Fatal %d:%s %s:%d\r\n", err->err_code, ERR_TO_STRING(err->err_code), (uint32_t)err->p_file_name, err->line_num);
     NRF_LOG_FINAL_FLUSH();
     // On assert, the system can only recover with a reset.
-#ifndef DEBUG
+//#ifndef DEBUG
     NVIC_SystemReset();
-#else
-    while(1) { continue; }
-    app_error_save_and_stop(id, pc, info);
-#endif // DEBUG
+//#else
+//    while(1) { continue; }
+//    app_error_save_and_stop(id, pc, info);
+//#endif // DEBUG
 }

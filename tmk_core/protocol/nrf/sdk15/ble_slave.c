@@ -69,6 +69,8 @@
 #include "ble_slave.h"
 #include "ble_common.h"
 
+#include "board.h"
+
 #define APP_FEATURE_NOT_SUPPORTED       BLE_GATT_STATUS_ATTERR_APP_BEGIN + 2        /**< Reply when unsupported features are requested. */
 
 #define APP_BLE_CONN_CFG_TAG            1                                           /**< A tag identifying the SoftDevice BLE configuration. */
@@ -129,7 +131,7 @@ static pm_peer_id_t m_peer_id; /**< Device reference handle to the current bonde
 
 static pm_peer_id_t m_whitelist_peers[BLE_GAP_WHITELIST_ADDR_MAX_COUNT]; /**< List of peers currently in the whitelist. */
 uint32_t m_whitelist_peer_cnt; /**< Number of peers currently in the whitelist. */
-static bool m_is_wl_changed; /**< Indicates if the whitelist has been changed since last time it has been updated in the Peer Manager. */
+//static bool m_is_wl_changed; /**< Indicates if the whitelist has been changed since last time it has been updated in the Peer Manager. */
 
 static uint16_t   m_conn_handle          = BLE_CONN_HANDLE_INVALID;                 /**< Handle of the current connection. */
 static uint16_t   m_ble_nus_max_data_len = BLE_GATT_ATT_MTU_DEFAULT - 3;            /**< Maximum length of data (in bytes) that can be transmitted to the peer by the Nordic UART service module. */
@@ -142,6 +144,16 @@ NRF_BLE_GATT_DEF(m_gatt);                                                       
 NRF_BLE_QWR_DEF(m_qwr);                                                             /**< Context for the Queued Write module.*/
 BLE_ADVERTISING_DEF(m_advertising);                                                 /**< Advertising module instance. */
 APP_TIMER_DEF( main_task_timer_id);
+
+
+typedef enum slave_ble_state_e
+{
+    SLAVE_BLE_DISCONNECTED,
+    SLAVE_BLE_ADVERTISING,
+    SLAVE_BLE_CONNECTED,
+} slave_ble_state_e;
+
+slave_ble_state_e slave_state = SLAVE_BLE_DISCONNECTED;
 
 /**@brief Function for assert macro callback.
  *
@@ -490,32 +502,41 @@ void conn_params_init(void) {
  * @param[in] ble_adv_evt  Advertising event.
  */
 static void on_adv_evt(ble_adv_evt_t ble_adv_evt) {
-  uint32_t err_code;
+//  uint32_t err_code;
+
+   NRF_LOG_INFO("On Advertising Event %x", ble_adv_evt);
   switch (ble_adv_evt) {
   case BLE_ADV_EVT_DIRECTED:
+    board_on_ble_event(BOARD_BLE_HOST_ADVERTISING);
     NRF_LOG_INFO("BLE_ADV_EVT_DIRECTED\r\n");
     break; //BLE_ADV_EVT_DIRECTED
 
   case BLE_ADV_EVT_FAST:
     NRF_LOG_INFO("BLE_ADV_EVT_FAST\r\n");
+    board_on_ble_event(BOARD_BLE_HOST_ADVERTISING);
     break; //BLE_ADV_EVT_FAST
 
   case BLE_ADV_EVT_SLOW:
+    board_on_ble_event(BOARD_BLE_HOST_ADVERTISING);
     NRF_LOG_INFO("BLE_ADV_EVT_SLOW\r\n");
     break; //BLE_ADV_EVT_SLOW
 
   case BLE_ADV_EVT_FAST_WHITELIST:
+    board_on_ble_event(BOARD_BLE_HOST_ADVERTISING);
     NRF_LOG_INFO("BLE_ADV_EVT_FAST_WHITELIST\r\n");
     break; //BLE_ADV_EVT_FAST_WHITELIST
 
   case BLE_ADV_EVT_SLOW_WHITELIST:
+    board_on_ble_event(BOARD_BLE_HOST_ADVERTISING);
     NRF_LOG_INFO("BLE_ADV_EVT_SLOW_WHITELIST\r\n");
     break; //BLE_ADV_EVT_SLOW_WHITELIST
 
   case BLE_ADV_EVT_IDLE:
+    slave_state = SLAVE_BLE_DISCONNECTED;
+    //board_on_ble_event(BOARD_BLE_HOST_DISCONNECTED);
     sleep_mode_enter();
     break; //BLE_ADV_EVT_IDLE
-
+/*
   case BLE_ADV_EVT_WHITELIST_REQUEST: {
     ble_gap_addr_t whitelist_addrs[BLE_GAP_WHITELIST_ADDR_MAX_COUNT];
     ble_gap_irk_t whitelist_irks[BLE_GAP_WHITELIST_ADDR_MAX_COUNT];
@@ -554,7 +575,7 @@ static void on_adv_evt(ble_adv_evt_t ble_adv_evt) {
     }
   }
     break; //BLE_ADV_EVT_PEER_ADDR_REQUEST
-
+*/
   default:
     break;
   }
@@ -574,6 +595,8 @@ static void on_ble_evt(ble_evt_t const * p_ble_evt, void * p_context) {
     m_conn_handle = p_ble_evt->evt.gap_evt.conn_handle;
     err_code = nrf_ble_qwr_conn_handle_assign(&m_qwr, m_conn_handle);
     APP_ERROR_CHECK(err_code);
+    slave_state = SLAVE_BLE_CONNECTED;
+    board_on_ble_event(BOARD_BLE_HOST_CONNECTED);
     break; // BLE_GAP_EVT_CONNECTED
 
   case BLE_GAP_EVT_DISCONNECTED:
@@ -582,7 +605,10 @@ static void on_ble_evt(ble_evt_t const * p_ble_evt, void * p_context) {
 //            err_code = bsp_indication_set(BSP_INDICATE_IDLE);
 //            APP_ERROR_CHECK(err_code);
     m_conn_handle = BLE_CONN_HANDLE_INVALID;
-
+    slave_state = SLAVE_BLE_DISCONNECTED;
+//    board_on_ble_event(BOARD_BLE_HOST_DISCONNECTED);
+//    advertising_start();
+/*
     if (m_is_wl_changed) {
       // The whitelist has been modified, update it in the Peer Manager.
       err_code = pm_whitelist_set(m_whitelist_peers, m_whitelist_peer_cnt);
@@ -594,6 +620,7 @@ static void on_ble_evt(ble_evt_t const * p_ble_evt, void * p_context) {
         APP_ERROR_CHECK(err_code);
       }
     }
+  */
     break; // BLE_GAP_EVT_DISCONNECTED
 
   case BLE_GAP_EVT_PHY_UPDATE_REQUEST: {
@@ -762,8 +789,9 @@ void advertising_init(void) {
       / sizeof(m_adv_uuids[0]);
   init.srdata.uuids_complete.p_uuids = m_adv_uuids;
 
-  init.config.ble_adv_whitelist_enabled = true;
-  init.config.ble_adv_directed_high_duty_enabled = true;
+//  init.config.ble_adv_whitelist_enabled = true;
+  init.config.ble_adv_whitelist_enabled = false;
+  init.config.ble_adv_directed_high_duty_enabled = false;
   init.config.ble_adv_directed_enabled = false;
   init.config.ble_adv_directed_interval = 0;
   init.config.ble_adv_directed_timeout = 0;
@@ -808,7 +836,7 @@ void ble_disconnect() {
 
 void advertising_start(void) {
   ret_code_t ret;
-
+/*
   memset(m_whitelist_peers, PM_PEER_ID_INVALID, sizeof(m_whitelist_peers));
   m_whitelist_peer_cnt = (sizeof(m_whitelist_peers) / sizeof(pm_peer_id_t));
 
@@ -825,6 +853,8 @@ void advertising_start(void) {
   }
 
   m_is_wl_changed = false;
+*/
+  slave_state = SLAVE_BLE_ADVERTISING;
 
   ret = ble_advertising_start(&m_advertising, BLE_ADV_MODE_FAST);
   APP_ERROR_CHECK(ret);

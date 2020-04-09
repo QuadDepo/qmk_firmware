@@ -68,3 +68,5 @@ util/Win_Check_Output.txt
 secrets.tar
 id_rsa_*
 /.vs
+libnrf.sdk15.NRF52840.debug.a
+libnrf.sdk15.NRF52840.a

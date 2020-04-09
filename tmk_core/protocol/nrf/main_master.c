@@ -50,6 +50,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "suspend.h"
 #include "wait.h"
 
+#include "board.h"
+
 const uint8_t MAINTASK_INTERVAL=17;
 
 /* -------------------------
@@ -74,6 +76,7 @@ host_driver_t nrf_ble_driver = {
   send_consumer
 };
 
+
 #ifdef VIRTSER_ENABLE
 void virtser_task(void);
 #endif
@@ -93,6 +96,8 @@ void main_tasks(void* p_context) {
   timer_tick(MAINTASK_INTERVAL);
 
   keyboard_task();
+
+  board_task();
 #ifdef CONSOLE_ENABLE
   console_task();
 #endif
@@ -108,6 +113,7 @@ void main_tasks(void* p_context) {
 }
 
 void send_keyboard(report_keyboard_t *report) {
+  NRF_LOG_INFO("send_keyboard report");
   if (get_ble_enabled()) {
     ble_send_keyboard(report);
   }
@@ -157,18 +163,28 @@ void send_abs_mouse(int8_t x, int8_t y) {
 int main(void) {
 //  // Initialize.
   logger_init();
+
+  NRF_LOG_INFO("Master starting...");
   timers_init(main_tasks);
 
   usbd_init();
 
 //app_usbd_enable();
 //NRF_LOG_INFO("USB enable");
-  adc_init();
+//  adc_init();
 
 #ifdef NRF_SEPARATE_KEYBOARD_MASTER
 #endif
   ble_stack_init();
   sd_power_dcdc_mode_set(NRF_POWER_DCDC_ENABLE);
+
+  NRF_LOG_INFO("BLE stack initialized");
+
+  board_init();
+
+  NRF_LOG_INFO("Board initialized");
+
+
   peer_manager_init();
   scheduler_init();
   gap_params_init();
@@ -181,6 +197,11 @@ int main(void) {
   nus_c_init();
 #endif
   // Start execution.
+
+  board_start();
+  NRF_LOG_INFO("Board started");
+
+
 #if defined(ENABLE_STARTUP_ADV_LIST)
   advertising_start();
 #elif defined(ENABLE_STARTUP_ADV_NOLIST)
@@ -190,6 +211,8 @@ int main(void) {
   scan_start();
 #endif
   timers_start();
+  NRF_LOG_INFO("Timers started");
+
 
   /* init printf */
   init_printf(NULL, sendchar_pf);
@@ -220,6 +243,7 @@ int main(void) {
   /* init TMK modules */
   keyboard_init();
   host_set_driver(driver);
+  NRF_LOG_INFO("QMK initialized");
   NRF_LOG_INFO("HID Keyboard Start!\r\n");
 
 #ifdef SLEEP_LED_ENABLE

@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"name": "equinox",
+			"path": "."
+		},
+		{
+			"name": "qmk",
+			"path": "../../"
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"usb_descriptor.h": "c"
+		}
+	}
+}
