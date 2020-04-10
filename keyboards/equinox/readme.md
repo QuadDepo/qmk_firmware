@@ -73,7 +73,7 @@ GNU_INSTALL_ROOT := opt/gcc-arm-none-eabi-8-2019-q3-update
 ```
 
 #### Environment script `setevn.sh`
-The `setenv.sh` script creates the environment variables needed by the Equinox build. The script is located in the bireme root directory. Edit this file and update the variables to the appropriate paths on the local machine.
+The `setenv.sh` script creates the environment variables needed by the Equinox build. The script is located in the equinox keyboard directory. Edit this file and update the variables to the appropriate paths on the local machine.
 
  Variable|Usage
 --------------|-------------------------------------------
@@ -82,7 +82,7 @@ The `setenv.sh` script creates the environment variables needed by the Equinox b
 `NRF_TOOLS`|path to Nordic command line tools
 `SEGGER`|path to SEGGER command line tools
 
-### Clone Bireme repository
+### Clone Equinox branch of QMK repository
 Clone the equinox branch of QMK source repository to the local machine
 ```
 git clone --single-branch --branch equinox_ble https://github.com/QuadDepo/qmk_firmware
