@@ -1,5 +1,6 @@
 # Equinonx BLE Keyboard Firmware
 * [Introduction](#introduction)
+  + [Keymap updates](#keymap-updates)
   + [Visual Studio Code support](#visual-studio-code-support)
 * [Setting up build environment](#setting-up-build-environment)
   + [Dependencies](#dependencies)
@@ -12,16 +13,16 @@
 * [Building firmware](#building-firmware)
   + [Command line build](#command-line-build)
   + [Visual Studio Code build](#visual-studio-code-build)
-* [Flashing firmware](#flashing-firmware)
+* [Updating firmware](#updating-firmware)
   + [Enter bootloader](#enter-bootloader)
   + [Update firmware](#update-firmware)
 * [Using the debug interface](#using-the-debug-interface)
   + [Flashing via debug interface](#flashing-via-debug-interface)
     - [Flashing firmware with OpenOCD](#flashing-firmware-with-openocd)
     - [Flashing firmware with Nordic `nrfjprog`](#flashing-firmware-with-nordic--nrfjprog-)
-  +[Debugging support](#debugging-support)
+  + [Debugging support](#debugging-support)
     - [Launch configurations](#launch-configurations)
-    - [Start debugger](#start-debugger)
+    - [Starting the debugger](#starting-the-debugger)
   + [OpenOCD installation and configuration](#openocd-installation-and-configuration)
     - [Build and Installation](#build-and-installation)
     - [udev device rules configuration](#udev-device-rules-configuration)
@@ -30,10 +31,22 @@
   + [J-Link](#j-link)
   + [Nordic command line tools](#nordic-command-line-tools)
 ---
+> Note: All instructions provided here assume a linux local machine.
+
 ## Introduction
 The firmware detailed here is for the Equinox wireless split keyboard system. This system consists of two keyboard units. Each unit is assigned one of two roles: master or slave. The `slave` searches for a `master`. Once connected, the `slave` scans for local key events and sends them to the `master`. The `master` connects the host pc and searches for slaves. The `master` scans its local matrix and combines any local key events with those received from the slave and transmits them to the host pc.
 
-> Note: The instructions give here assume a linux local machine.
+### Keymap updates
+The keymap is stored on the `master`, therefore, when updating the keymap only the firmware for the `master` needs to be rebuilt and updated.
+
+To create a new keymap:
+1. Create a new folder under `equinox/keymaps` using the name for your keymap
+1. Copy the `keymaps.c` file from `equinox/keymaps/default` to your new folder.
+1. Edit `keymaps.c` to change the keymap.
+
+To update the `master` with a new keymap:
+1. Build the firmware. See [Building firmware](#building-firmware) for information on how to build the `master` using your new keymap.
+1. Update the `master` firmware. See [Updating firmware](#updating-firmware) for information on how to update the firmware for the `master`.
 
 ### Visual Studio Code support
 Visual Studio Code workspace, task and debugging configuration is included in this repository for the Equinox source code. 
@@ -73,14 +86,13 @@ GNU_INSTALL_ROOT := opt/gcc-arm-none-eabi-8-2019-q3-update
 ```
 
 #### Environment script `setevn.sh`
-The `setenv.sh` script creates the environment variables needed by the Equinox build. The script is located in the equinox keyboard directory. Edit this file and update the variables to the appropriate paths on the local machine.
+The `setenv.sh` script creates the environment variables needed by the Equinox build. The script is located in the equinox keyboard directory. Edit this file and update the following variables to the appropriate paths on the local machine.
 
  Variable|Usage
 --------------|-------------------------------------------
 `GCC_ARM`|path to the ARM embedded toolchain
 `NRFSDK15_ROOT`|path to Nordic nRF5 SDK version 15.0.0 
 `NRF_TOOLS`|path to Nordic command line tools
-`SEGGER`|path to SEGGER command line tools
 
 ### Clone Equinox branch of QMK repository
 Clone the equinox branch of QMK source repository to the local machine
@@ -95,9 +107,13 @@ The firmware can be built from the command line or from within Visual Studio Cod
 From the qmk root directory:
 
 ```
-make equinox\<role>:<keymap>:uf2
+make equinox/<role>:<keymap>:uf2
 ```
-where `<role>` is either `master` or `slave` and `<keymap>` is the keymap folder.
+where `<role>` is either `master` or `slave` and `<keymap>` is the keymap folder. For example to build the firmware for the `master` using the `default` keymap:
+
+```
+make equinox/master:default:uf2
+```
 
 ### Visual Studio Code build
 From the keyboards/equinox directory within the qmk repository folder, lauch VSCode using the `vscode.sh` script:
@@ -108,11 +124,11 @@ To build firmware for each role, run the `build` task. There are two ways to do 
 1. Press `Ctrl+P` and type `task build` followed by `Enter`
 1. Select `Run Task` from the `Terminal` menu and the select `build`
 
-A drop down menu with allow you to select the role you wish to build and the keymap.
+A drop down menu with allow you to select the role you wish to build and followed by the keymap.
 
 Note: If you add a keymap folder, you will have to add the folder name to the `tasks.json` file for vscode. Add it to the `options` for the keymap input to the build task.
 
-## Flashing firmware
+## Updating firmware
 Equinox uses a USB mass storage bootloader to update firmware. The firware needs to be packaged using the UF2 format. The UF2 file is generated by the build if the `:uf2` tag is added to the build command. Note: A python script `qmk_firmware/util/ufconv.py` is used to convert the .hex file generated buy the build into a UF2 file.
 
 ### Enter bootloader
@@ -179,9 +195,9 @@ where `<firmware-file>` is the firmware .hex file.
 Debugging support is provided using gdb via the Cortex-Debug extension. https://marketplace.visualstudio.com/items?itemName=marus25.cortex-debug
 
 #### Launch configurations
-The `launch.json` file in the `.vscode` folder contains configurations for both J-Link and ST-Link debuggers. 
+The `launch.json` file in the `.vscode` folder contains configurations for both J-Link and ST-Link debuggers.  The J-Link configuration uses the Segger provided GDB server, while the ST-Link configuration used the OpenOCD GDB server.
 
-#### Start debugger
+#### Starting the debugger
 To start debugging, 
 1. Select the appropriate launch configuration from `Run` side bar.
 1. Select `Start Debugging` from the `Run` menu or press `F5`. The task will prompt for a role, keymap and in the case of the J-Link debugger, the serial number of the debugger.
@@ -248,14 +264,9 @@ The latest J-Link software is recommended and can be downloaded from:
 https://www.segger.com/downloads/jlink/#J-LinkSoftwareAndDocumentationPack
 
 ### Nordic command line tools
-The Nordic command line tools can be used to program the devices if you are using J-Link. This is optional.
+The Nordic command line tools can be used to program the devices if you are using J-Link. 
 The tools can be download from:
-https://www.nordicsemi.com/Software-and-Tools/Development-Tools/nRF-Command-Line-Tools/Download#infotabs\
+https://www.nordicsemi.com/Software-and-Tools/Development-Tools/nRF-Command-Line-Tools/Download#infotabs
 
 Extract to the local machine: (suggested location: /opt)
 Note: Nordic has a Debian install package but it does not seem to update paths correctly.
-
-
-
-
-
